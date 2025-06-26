@@ -1,6 +1,8 @@
 # MyLoRA Desktop Client
 
-This folder contains a simple Tkinter based client for interacting with the MyLoRA REST API.
+This folder contains a Tkinter based client for interacting with the MyLoRA REST API.
+The application now uses a dark themed grid interface similar to the MyLora web
+gallery.
 
 ## Usage
 

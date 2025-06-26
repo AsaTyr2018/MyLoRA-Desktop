@@ -1,69 +1,88 @@
-"""Basic Tkinter client for the MyLoRA API."""
+"""Tkinter client for the MyLoRA API with a dark themed grid UI."""
 
-from tkinter import (
-    Tk,
-    Listbox,
-    Entry,
-    Button,
-    Label,
-    END,
-    Scrollbar,
-    RIGHT,
-    Y,
-    Toplevel,
-    StringVar,
-    OptionMenu,
-    filedialog,
-)
+from tkinter import Tk, Canvas, Toplevel, StringVar, filedialog
+from tkinter import ttk
 from threading import Thread
 import io
 from PIL import Image, ImageTk
 import requests
 import api
 
+GRID_COLUMNS = 5
+THUMB_SIZE = 120
+
+
+def apply_dark_theme(root) -> dict:
+    style = ttk.Style(root)
+    style.theme_use("clam")
+    colors = {
+        "bg": "#0d0f11",
+        "fg": "#f8f9fa",
+        "frame": "#20232a",
+    }
+    style.configure(".", background=colors["bg"], foreground=colors["fg"])
+    style.configure("TButton", background=colors["frame"])
+    style.configure("TEntry", fieldbackground=colors["frame"])
+    style.configure("TMenubutton", background=colors["frame"])
+    style.configure("Grid.TFrame", background=colors["frame"], borderwidth=1, relief="ridge")
+    return colors
+
 
 class App(Tk):
     def __init__(self):
         super().__init__()
         self.title("MyLoRA Desktop")
-        self.geometry("600x400")
+        self.geometry("800x600")
+        self.colors = apply_dark_theme(self)
+        self.configure(bg=self.colors["bg"])
 
-        self.search_entry = Entry(self)
-        self.search_entry.pack(fill='x', padx=5, pady=5)
+        top = ttk.Frame(self)
+        top.pack(fill="x", padx=10, pady=10)
 
-        # Category dropdown
+        self.search_entry = ttk.Entry(top)
+        self.search_entry.pack(side="left", expand=True, fill="x", padx=(0, 5))
+
         self.category_var = StringVar(self)
-        self.category_var.set('')
-        self.category_menu = OptionMenu(self, self.category_var, '')
-        self.category_menu.pack(fill='x', padx=5, pady=5)
+        self.category_menu = ttk.OptionMenu(top, self.category_var, "")
+        self.category_menu.pack(side="left", padx=(0, 5))
         self.categories = []
         Thread(target=self._fetch_categories).start()
 
-        self.search_btn = Button(self, text="Search", command=self.load_data)
-        self.search_btn.pack(pady=5)
+        ttk.Button(top, text="Search", command=self.load_data).pack(side="left")
 
-        scrollbar = Scrollbar(self)
-        scrollbar.pack(side=RIGHT, fill=Y)
+        self.canvas = Canvas(self, bg=self.colors["bg"], highlightthickness=0)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        self.listbox = Listbox(self, yscrollcommand=scrollbar.set)
-        self.listbox.pack(expand=True, fill='both', padx=5, pady=5)
-        self.listbox.bind('<<ListboxSelect>>', self.on_select)
-        scrollbar.config(command=self.listbox.yview)
+        self.grid_frame = ttk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.grid_frame, anchor="nw")
+        self.grid_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")),
+        )
 
-        self.status = Label(self, text="", anchor='w')
-        self.status.pack(fill='x')
+        self.status = ttk.Label(self, text="")
+        self.status.pack(fill="x", padx=10, pady=(0, 5))
 
         self.entries = []
+        self.grid_photos = []
         self.after(100, self.load_data)
 
+    def _clear_grid(self):
+        for child in self.grid_frame.winfo_children():
+            child.destroy()
+        self.grid_photos = []
+
     def load_data(self):
-        query = self.search_entry.get() or '*'
+        query = self.search_entry.get() or "*"
         self.status.config(text="Loading...")
         category_name = self.category_var.get()
         category_id = None
         for c in self.categories:
-            if c['name'] == category_name:
-                category_id = c['id']
+            if c["name"] == category_name:
+                category_id = c["id"]
                 break
         Thread(target=self._fetch_and_populate, args=(query, category_id)).start()
 
@@ -71,10 +90,32 @@ class App(Tk):
         try:
             entries = api.grid_data(q=query, category=category_id)
             self.entries = entries
-            self.listbox.delete(0, END)
-            for entry in entries:
-                name = entry.get('name') or entry.get('filename')
-                self.listbox.insert(END, name)
+            self._clear_grid()
+            for idx, entry in enumerate(entries):
+                row = idx // GRID_COLUMNS
+                col = idx % GRID_COLUMNS
+                frame = ttk.Frame(self.grid_frame, style="Grid.TFrame", width=THUMB_SIZE, height=THUMB_SIZE)
+                frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+                img_label = ttk.Label(frame)
+                img_label.pack(expand=True, fill="both")
+                name = entry.get("name") or entry.get("filename")
+                ttk.Label(frame, text=name, anchor="center", wraplength=THUMB_SIZE).pack(fill="x", pady=(2, 0))
+                frame.bind("<Button-1>", lambda e, ent=entry: self.open_detail(ent))
+                img_label.bind("<Button-1>", lambda e, ent=entry: self.open_detail(ent))
+                preview = entry.get("preview_url")
+                if preview:
+                    try:
+                        url = api.preview_url(preview)
+                        data = requests.get(url).content
+                        img = Image.open(io.BytesIO(data))
+                        img.thumbnail((THUMB_SIZE, THUMB_SIZE))
+                        photo = ImageTk.PhotoImage(img)
+                        img_label.config(image=photo)
+                        self.grid_photos.append(photo)
+                    except Exception:
+                        img_label.config(text="No preview")
+                else:
+                    img_label.config(text="No preview")
             self.status.config(text=f"Loaded {len(entries)} entries")
         except Exception as exc:
             self.status.config(text=f"Error: {exc}")
@@ -82,20 +123,16 @@ class App(Tk):
     def _fetch_categories(self):
         try:
             self.categories = api.categories()
-            names = [''] + [c['name'] for c in self.categories]
+            names = [""] + [c["name"] for c in self.categories]
             self.category_var.set(names[0])
-            menu = self.category_menu['menu']
-            menu.delete(0, 'end')
+            menu = self.category_menu["menu"]
+            menu.delete(0, "end")
             for n in names:
                 menu.add_command(label=n, command=lambda v=n: self.category_var.set(v))
         except Exception as exc:
             self.status.config(text=f"Error: {exc}")
 
-    def on_select(self, event):
-        if not self.listbox.curselection():
-            return
-        idx = self.listbox.curselection()[0]
-        entry = self.entries[idx]
+    def open_detail(self, entry):
         DetailWindow(self, entry)
 
 
@@ -104,11 +141,13 @@ class DetailWindow(Toplevel):
 
     def __init__(self, parent: Tk, entry: dict):
         super().__init__(parent)
-        self.title(entry.get('name') or entry.get('filename'))
-        self.geometry('400x400')
+        apply_dark_theme(self)
+        self.configure(bg="#0d0f11")
+        self.title(entry.get("name") or entry.get("filename"))
+        self.geometry("400x400")
 
-        preview = entry.get('preview_url')
-        self.img_label = Label(self)
+        preview = entry.get("preview_url")
+        self.img_label = ttk.Label(self)
         self.img_label.pack(pady=10)
         if preview:
             try:
@@ -119,14 +158,14 @@ class DetailWindow(Toplevel):
                 self.photo = ImageTk.PhotoImage(img)
                 self.img_label.config(image=self.photo)
             except Exception:
-                self.img_label.config(text='Failed to load preview')
+                self.img_label.config(text="Failed to load preview")
         else:
-            self.img_label.config(text='No preview')
+            self.img_label.config(text="No preview")
 
-        Button(
+        ttk.Button(
             self,
-            text='Download',
-            command=lambda: self._download(entry['filename']),
+            text="Download",
+            command=lambda: self._download(entry["filename"]),
         ).pack(pady=5)
 
     def _download(self, filename: str):
@@ -135,6 +174,6 @@ class DetailWindow(Toplevel):
             api.download_file(filename, dest)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = App()
     app.mainloop()

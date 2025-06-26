@@ -27,3 +27,19 @@ def grid_data(q: str = '*', category: int | None = None, offset: int = 0, limit:
 
 def categories():
     return _request('categories')
+
+def download_file(filename: str, dest_path: str):
+    """Download ``filename`` from the server to ``dest_path``."""
+    url = urljoin(config.API_BASE_URL + '/', f'uploads/{filename}')
+    with requests.get(url, stream=True) as resp:
+        resp.raise_for_status()
+        with open(dest_path, 'wb') as fh:
+            for chunk in resp.iter_content(chunk_size=8192):
+                if chunk:
+                    fh.write(chunk)
+    return dest_path
+
+
+def preview_url(path: str) -> str:
+    """Return absolute URL for a preview image or safetensors file."""
+    return urljoin(config.API_BASE_URL + '/', path.lstrip('/'))

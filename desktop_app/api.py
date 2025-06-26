@@ -2,6 +2,8 @@
 
 from urllib.parse import urljoin
 import io
+import os
+import tempfile
 import requests
 from safetensors import safe_open
 
@@ -85,8 +87,17 @@ def fetch_metadata(filename: str) -> dict:
     url = urljoin(config.API_BASE_URL + '/', f'uploads/{filename}')
     resp = requests.get(url)
     resp.raise_for_status()
+    tmp = tempfile.NamedTemporaryFile(delete=False)
     try:
-        with safe_open(io.BytesIO(resp.content), framework="pt") as f:
+        tmp.write(resp.content)
+        tmp.flush()
+        tmp.close()
+        with safe_open(tmp.name, framework="pt") as f:
             return f.metadata() or {}
     except Exception as exc:
         return {"error": str(exc)}
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except Exception:
+            pass

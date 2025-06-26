@@ -50,7 +50,17 @@ def preview_url(path: str) -> str:
 def _head(path: str) -> bool:
     """Return ``True`` if ``/uploads/path`` exists on the server."""
     url = urljoin(config.API_BASE_URL + '/', f'uploads/{path}')
-    resp = requests.head(url)
+    try:
+        resp = requests.head(url)
+    except requests.RequestException:
+        # some servers (e.g. behind certain proxies) may not allow HEAD
+        resp = requests.get(url, stream=True)
+    finally:
+        # ensure we close the connection to avoid leaking sockets
+        try:
+            resp.close()
+        except Exception:
+            pass
     return resp.status_code == 200
 
 

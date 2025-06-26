@@ -9,7 +9,7 @@ import requests
 import api
 
 GRID_COLUMNS = 5
-THUMB_SIZE = 120
+THUMB_SIZE = 180
 
 
 def apply_dark_theme(root) -> dict:
@@ -19,12 +19,33 @@ def apply_dark_theme(root) -> dict:
         "bg": "#0d0f11",
         "fg": "#f8f9fa",
         "frame": "#20232a",
+        "accent": "#58a6ff",
     }
     style.configure(".", background=colors["bg"], foreground=colors["fg"])
-    style.configure("TButton", background=colors["frame"])
+    style.configure("TButton", background=colors["frame"], foreground=colors["fg"])
+    style.map(
+        "TButton",
+        background=[("active", colors["accent"])],
+        foreground=[("active", colors["bg"])],
+    )
+    style.configure(
+        "Accent.TButton",
+        background=colors["accent"],
+        foreground=colors["bg"],
+    )
+    style.map(
+        "Accent.TButton",
+        background=[("active", colors["frame"])],
+        foreground=[("active", colors["fg"])],
+    )
     style.configure("TEntry", fieldbackground=colors["frame"])
-    style.configure("TMenubutton", background=colors["frame"])
-    style.configure("Grid.TFrame", background=colors["frame"], borderwidth=1, relief="ridge")
+    style.configure("TMenubutton", background=colors["frame"], foreground=colors["fg"])
+    style.configure(
+        "Grid.TFrame",
+        background=colors["frame"],
+        borderwidth=1,
+        relief="ridge",
+    )
     return colors
 
 
@@ -94,14 +115,26 @@ class App(Tk):
             for idx, entry in enumerate(entries):
                 row = idx // GRID_COLUMNS
                 col = idx % GRID_COLUMNS
-                frame = ttk.Frame(self.grid_frame, style="Grid.TFrame", width=THUMB_SIZE, height=THUMB_SIZE)
+                frame = ttk.Frame(
+                    self.grid_frame,
+                    style="Grid.TFrame",
+                    width=THUMB_SIZE,
+                    height=THUMB_SIZE,
+                )
                 frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
-                img_label = ttk.Label(frame)
-                img_label.pack(expand=True, fill="both")
+                self.grid_frame.columnconfigure(col, weight=1)
+
+                canvas = Canvas(
+                    frame,
+                    width=THUMB_SIZE,
+                    height=THUMB_SIZE,
+                    highlightthickness=0,
+                    bg=self.colors["frame"],
+                )
+                canvas.pack(expand=True, fill="both")
+                canvas.bind("<Button-1>", lambda e, ent=entry: self.open_detail(ent))
+
                 name = entry.get("name") or entry.get("filename")
-                ttk.Label(frame, text=name, anchor="center", wraplength=THUMB_SIZE).pack(fill="x", pady=(2, 0))
-                frame.bind("<Button-1>", lambda e, ent=entry: self.open_detail(ent))
-                img_label.bind("<Button-1>", lambda e, ent=entry: self.open_detail(ent))
                 preview = entry.get("preview_url")
                 if preview:
                     try:
@@ -110,12 +143,39 @@ class App(Tk):
                         img = Image.open(io.BytesIO(data))
                         img.thumbnail((THUMB_SIZE, THUMB_SIZE))
                         photo = ImageTk.PhotoImage(img)
-                        img_label.config(image=photo)
+                        canvas.create_image(0, 0, anchor="nw", image=photo)
                         self.grid_photos.append(photo)
                     except Exception:
-                        img_label.config(text="No preview")
+                        canvas.create_text(
+                            THUMB_SIZE / 2,
+                            THUMB_SIZE / 2,
+                            text="No preview",
+                            fill=self.colors["fg"],
+                        )
                 else:
-                    img_label.config(text="No preview")
+                    canvas.create_text(
+                        THUMB_SIZE / 2,
+                        THUMB_SIZE / 2,
+                        text="No preview",
+                        fill=self.colors["fg"],
+                    )
+
+                canvas.create_rectangle(
+                    0,
+                    THUMB_SIZE - 20,
+                    THUMB_SIZE,
+                    THUMB_SIZE,
+                    fill="#000000",
+                    outline="",
+                    stipple="gray50",
+                )
+                canvas.create_text(
+                    THUMB_SIZE / 2,
+                    THUMB_SIZE - 10,
+                    text=name,
+                    fill=self.colors["fg"],
+                    anchor="center",
+                )
             self.status.config(text=f"Loaded {len(entries)} entries")
         except Exception as exc:
             self.status.config(text=f"Error: {exc}")
@@ -144,7 +204,7 @@ class DetailWindow(Toplevel):
         apply_dark_theme(self)
         self.configure(bg="#0d0f11")
         self.title(entry.get("name") or entry.get("filename"))
-        self.geometry("400x400")
+        self.geometry("500x500")
 
         preview = entry.get("preview_url")
         self.img_label = ttk.Label(self)
@@ -154,7 +214,7 @@ class DetailWindow(Toplevel):
                 url = api.preview_url(preview)
                 data = requests.get(url).content
                 img = Image.open(io.BytesIO(data))
-                img.thumbnail((350, 350))
+                img.thumbnail((460, 460))
                 self.photo = ImageTk.PhotoImage(img)
                 self.img_label.config(image=self.photo)
             except Exception:
@@ -165,6 +225,7 @@ class DetailWindow(Toplevel):
         ttk.Button(
             self,
             text="Download",
+            style="Accent.TButton",
             command=lambda: self._download(entry["filename"]),
         ).pack(pady=5)
 

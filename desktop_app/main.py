@@ -208,10 +208,35 @@ class DetailWindow(Toplevel):
         self.title(entry.get("name") or entry.get("filename"))
         self.geometry("600x600")
 
-        self.preview_container = ttk.Frame(self)
-        self.preview_container.pack(pady=10)
+        # create vertically scrollable area
+        self.canvas = Canvas(self, bg=self.colors["bg"], highlightthickness=0)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        self.meta_frame = ttk.Frame(self)
+        self.container = ttk.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.container, anchor="nw")
+        self.container.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")),
+        )
+
+        # previews with horizontal scrolling
+        self.preview_canvas = Canvas(self.container, bg=self.colors["bg"], highlightthickness=0, height=200)
+        self.preview_canvas.pack(fill="x", pady=10)
+        self.hscroll = ttk.Scrollbar(self.container, orient="horizontal", command=self.preview_canvas.xview)
+        self.hscroll.pack(fill="x")
+        self.preview_canvas.configure(xscrollcommand=self.hscroll.set)
+
+        self.preview_container = ttk.Frame(self.preview_canvas)
+        self.preview_canvas.create_window((0, 0), window=self.preview_container, anchor="nw")
+        self.preview_container.bind(
+            "<Configure>",
+            lambda e: self.preview_canvas.configure(scrollregion=self.preview_canvas.bbox("all")),
+        )
+
+        self.meta_frame = ttk.Frame(self.container)
         self.meta_frame.pack(fill="both", expand=True, padx=10)
 
         ttk.Button(
@@ -242,10 +267,11 @@ class DetailWindow(Toplevel):
                     img.thumbnail((180, 180))
                     photo = ImageTk.PhotoImage(img)
                     lbl = ttk.Label(self.preview_container, image=photo)
-                    lbl.pack(side="left", padx=5)
+                    lbl.pack(side="left", padx=5, pady=5)
                     self.photos.append(photo)
                 except Exception:
                     pass
+            self.preview_canvas.configure(scrollregion=self.preview_canvas.bbox("all"))
         else:
             ttk.Label(self.preview_container, text="No previews").pack()
 
@@ -254,6 +280,8 @@ class DetailWindow(Toplevel):
             row.pack(fill="x", anchor="w")
             ttk.Label(row, text=f"{key}:", width=20, anchor="w").pack(side="left")
             ttk.Label(row, text=str(value), anchor="w").pack(side="left")
+
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _download(self, filename: str):
         dest = filedialog.asksaveasfilename(initialfile=filename)

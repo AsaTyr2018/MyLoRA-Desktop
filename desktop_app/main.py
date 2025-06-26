@@ -109,77 +109,82 @@ class App(Tk):
         Thread(target=self._fetch_and_populate, args=(query, category_id)).start()
 
     def _fetch_and_populate(self, query: str, category_id: int | None):
+        """Fetch data in a thread and schedule the UI update on the main loop."""
         try:
             entries = api.grid_data(q=query, category=category_id)
             self.entries = entries
-            self._clear_grid()
-            for idx, entry in enumerate(entries):
-                row = idx // GRID_COLUMNS
-                col = idx % GRID_COLUMNS
-                frame = ttk.Frame(
-                    self.grid_frame,
-                    style="Grid.TFrame",
-                    width=THUMB_SIZE,
-                    height=THUMB_SIZE,
-                )
-                frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
-                self.grid_frame.columnconfigure(col, weight=1)
+            self.after(0, lambda: self._populate_grid(entries))
+        except Exception as exc:
+            self.after(0, lambda: self.status.config(text=f"Error: {exc}"))
 
-                canvas = Canvas(
-                    frame,
-                    width=THUMB_SIZE,
-                    height=THUMB_SIZE,
-                    highlightthickness=0,
-                    bg=self.colors["frame"],
-                )
-                canvas.pack(expand=True, fill="both")
-                canvas.bind("<Button-1>", lambda e, ent=entry: self.open_detail(ent))
+    def _populate_grid(self, entries: list[dict]):
+        """Populate the grid with ``entries`` on the main thread."""
+        self._clear_grid()
+        for idx, entry in enumerate(entries):
+            row = idx // GRID_COLUMNS
+            col = idx % GRID_COLUMNS
+            frame = ttk.Frame(
+                self.grid_frame,
+                style="Grid.TFrame",
+                width=THUMB_SIZE,
+                height=THUMB_SIZE,
+            )
+            frame.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+            self.grid_frame.columnconfigure(col, weight=1)
 
-                name = entry.get("name") or entry.get("filename")
-                preview = entry.get("preview_url")
-                if preview:
-                    try:
-                        url = api.preview_url(preview)
-                        data = requests.get(url).content
-                        img = Image.open(io.BytesIO(data))
-                        img.thumbnail((THUMB_SIZE, THUMB_SIZE))
-                        photo = ImageTk.PhotoImage(img)
-                        canvas.create_image(0, 0, anchor="nw", image=photo)
-                        self.grid_photos.append(photo)
-                    except Exception:
-                        canvas.create_text(
-                            THUMB_SIZE / 2,
-                            THUMB_SIZE / 2,
-                            text="No preview",
-                            fill=self.colors["fg"],
-                        )
-                else:
+            canvas = Canvas(
+                frame,
+                width=THUMB_SIZE,
+                height=THUMB_SIZE,
+                highlightthickness=0,
+                bg=self.colors["frame"],
+            )
+            canvas.pack(expand=True, fill="both")
+            canvas.bind("<Button-1>", lambda e, ent=entry: self.open_detail(ent))
+
+            name = entry.get("name") or entry.get("filename")
+            preview = entry.get("preview_url")
+            if preview:
+                try:
+                    url = api.preview_url(preview)
+                    data = requests.get(url).content
+                    img = Image.open(io.BytesIO(data))
+                    img.thumbnail((THUMB_SIZE, THUMB_SIZE))
+                    photo = ImageTk.PhotoImage(img)
+                    canvas.create_image(0, 0, anchor="nw", image=photo)
+                    self.grid_photos.append(photo)
+                except Exception:
                     canvas.create_text(
                         THUMB_SIZE / 2,
                         THUMB_SIZE / 2,
                         text="No preview",
                         fill=self.colors["fg"],
                     )
-
-                canvas.create_rectangle(
-                    0,
-                    THUMB_SIZE - 20,
-                    THUMB_SIZE,
-                    THUMB_SIZE,
-                    fill="#000000",
-                    outline="",
-                    stipple="gray50",
-                )
+            else:
                 canvas.create_text(
                     THUMB_SIZE / 2,
-                    THUMB_SIZE - 10,
-                    text=name,
+                    THUMB_SIZE / 2,
+                    text="No preview",
                     fill=self.colors["fg"],
-                    anchor="center",
                 )
-            self.status.config(text=f"Loaded {len(entries)} entries")
-        except Exception as exc:
-            self.status.config(text=f"Error: {exc}")
+
+            canvas.create_rectangle(
+                0,
+                THUMB_SIZE - 20,
+                THUMB_SIZE,
+                THUMB_SIZE,
+                fill="#000000",
+                outline="",
+                stipple="gray50",
+            )
+            canvas.create_text(
+                THUMB_SIZE / 2,
+                THUMB_SIZE - 10,
+                text=name,
+                fill=self.colors["fg"],
+                anchor="center",
+            )
+        self.status.config(text=f"Loaded {len(entries)} entries")
 
     def _fetch_categories(self):
         try:

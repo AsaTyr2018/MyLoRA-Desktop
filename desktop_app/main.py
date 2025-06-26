@@ -230,6 +230,9 @@ class DetailWindow(Toplevel):
         self.after(0, lambda: self._populate(previews, metadata))
 
     def _populate(self, previews: list[str], metadata: dict):
+        if not self.meta_frame.winfo_exists():
+            return
+
         self.photos = []
         if previews:
             for url in previews:

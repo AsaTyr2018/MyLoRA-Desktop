@@ -4,6 +4,7 @@ from tkinter import Tk, Canvas, Toplevel, StringVar, filedialog
 from tkinter import ttk
 from threading import Thread
 import io
+from pathlib import Path
 from PIL import Image, ImageTk
 import requests
 import api
@@ -197,30 +198,21 @@ class App(Tk):
 
 
 class DetailWindow(Toplevel):
-    """Display preview image and download option for a LoRA entry."""
+    """Display preview images, metadata and download option for a LoRA entry."""
 
     def __init__(self, parent: Tk, entry: dict):
         super().__init__(parent)
-        apply_dark_theme(self)
-        self.configure(bg="#0d0f11")
+        self.entry = entry
+        self.colors = apply_dark_theme(self)
+        self.configure(bg=self.colors["bg"])
         self.title(entry.get("name") or entry.get("filename"))
-        self.geometry("500x500")
+        self.geometry("600x600")
 
-        preview = entry.get("preview_url")
-        self.img_label = ttk.Label(self)
-        self.img_label.pack(pady=10)
-        if preview:
-            try:
-                url = api.preview_url(preview)
-                data = requests.get(url).content
-                img = Image.open(io.BytesIO(data))
-                img.thumbnail((460, 460))
-                self.photo = ImageTk.PhotoImage(img)
-                self.img_label.config(image=self.photo)
-            except Exception:
-                self.img_label.config(text="Failed to load preview")
-        else:
-            self.img_label.config(text="No preview")
+        self.preview_container = ttk.Frame(self)
+        self.preview_container.pack(pady=10)
+
+        self.meta_frame = ttk.Frame(self)
+        self.meta_frame.pack(fill="both", expand=True, padx=10)
 
         ttk.Button(
             self,
@@ -228,6 +220,37 @@ class DetailWindow(Toplevel):
             style="Accent.TButton",
             command=lambda: self._download(entry["filename"]),
         ).pack(pady=5)
+
+        Thread(target=self._load_details).start()
+
+    def _load_details(self):
+        stem = Path(self.entry.get("filename", "")).stem
+        previews = api.list_previews(stem)
+        metadata = api.fetch_metadata(self.entry["filename"])
+        self.after(0, lambda: self._populate(previews, metadata))
+
+    def _populate(self, previews: list[str], metadata: dict):
+        self.photos = []
+        if previews:
+            for url in previews:
+                try:
+                    data = requests.get(url).content
+                    img = Image.open(io.BytesIO(data))
+                    img.thumbnail((180, 180))
+                    photo = ImageTk.PhotoImage(img)
+                    lbl = ttk.Label(self.preview_container, image=photo)
+                    lbl.pack(side="left", padx=5)
+                    self.photos.append(photo)
+                except Exception:
+                    pass
+        else:
+            ttk.Label(self.preview_container, text="No previews").pack()
+
+        for key, value in sorted(metadata.items()):
+            row = ttk.Frame(self.meta_frame)
+            row.pack(fill="x", anchor="w")
+            ttk.Label(row, text=f"{key}:", width=20, anchor="w").pack(side="left")
+            ttk.Label(row, text=str(value), anchor="w").pack(side="left")
 
     def _download(self, filename: str):
         dest = filedialog.asksaveasfilename(initialfile=filename)

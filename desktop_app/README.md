@@ -1,7 +1,7 @@
 # MyLoRA Desktop Client
 
 This folder contains a Tkinter based client for interacting with the MyLoRA REST API.
-The application now uses a dark themed grid interface inspired by the MyLora web gallery. Grid items display the preview with the file name overlaid at the bottom and the download action uses an accent coloured button.
+The application now uses a dark themed grid interface inspired by the MyLora web gallery. Grid items display the preview with the file name overlaid at the bottom and the download action uses an accent coloured button. The detail view includes scroll bars to handle many preview images and long metadata sections.
 
 ## Usage
 

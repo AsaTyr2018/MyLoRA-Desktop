@@ -1,1 +1,1 @@
-# MyLoRA-Desktop
+# MyLoRA-Desktop (WORK IN PROGRESS!)
